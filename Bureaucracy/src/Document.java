@@ -1,26 +1,19 @@
-import java.util.*;
+import java.util.List;
 
-public class Document
-{
-    String name;
-    List<String> dependencies;
+public class Document {
+    private final String name;                // document name
+    private final List<String> dependencies;  // required docs
 
-    public Document(String name, List<String> dependencies)
-    {
+    public Document(String name, List<String> dependencies) {
         this.name = name;
         this.dependencies = dependencies;
     }
 
-    public String getName()
-    {
+    public String getName() {
         return name;
     }
 
-    public List<String> getDependencies()
-    {
+    public List<String> getDependencies() {
         return dependencies;
     }
 }
-
-//Clasa Document reține numele unui act și lista actelor de care depinde
-//pta simula relațiile dintre documente (dependințe)

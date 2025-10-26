@@ -1,118 +1,99 @@
 import java.util.*;
 import java.util.concurrent.*;
 
-public class BureaucracySystem
-{
-    Map<String, Document> documents = new HashMap<>();
-    Map<String, Office> offices = new HashMap<>();
-    ExecutorService executor = Executors.newCachedThreadPool();
+public class BureaucracySystem {
+    private Map<String, Document> documents = new HashMap<>();
+    private Map<String, Office> offices = new HashMap<>();
+    private ExecutorService executor = Executors.newCachedThreadPool();
+    private Random random = new Random();
 
-    public void addOffice(Office o)
-    {
-        offices.put(o.name, o);
-        executor.submit(o);
-    }
-
-    public void addDocument(Document d)
-    {
+    // add new document type
+    public synchronized void addDocument(Document d) {
         documents.put(d.getName(), d);
     }
 
-    public Office getOfficeForDoc(String doc)
-    {
-        for (Office o : offices.values())
-        {
-            if (o.documentType.equals(doc)) return o;
+    // add new office and start its thread
+    public synchronized void addOffice(Office o) {
+        offices.put(o.getName(), o);
+        executor.submit(o); // start office thread
+        System.out.println("[System] started " + o.getName() + " for " + o.getDocumentType());
+    }
+
+    // find office that can issue given document
+    public synchronized Office getOfficeForDoc(String docName) {
+        for (Office o : offices.values()) {
+            if (o.getDocumentType().equals(docName)) {
+                return o;
+            }
         }
         return null;
     }
 
-    public void redirectCustomer(Customer c, String doc) throws InterruptedException
-    {
-        for (Office o : offices.values())
-        {
-            if (o.documentType.equals(doc) && o.open)
-            {
-                System.out.println("[" + c.getName() + "] redirected to " + o.name);
-                o.addCustomer(c);
-                return;
-            }
-        }
-        System.out.println("[" + c.getName() + "] no open office for " + doc + " -> waiting...");
-        Thread.sleep(1000);
-        redirectCustomer(c, doc);
+    // build dependency plan for requested document
+    public List<String> getAcquisitionPlan(String target) {
+        LinkedHashSet<String> ordered = new LinkedHashSet<>();
+        buildPlanDFS(target, ordered, new HashSet<>());
+        return new ArrayList<>(ordered);
     }
 
-    public List<String> getDocumentPath(String target)
-    {
-        List<String> path = new ArrayList<>();
-        buildPath(target, path, new HashSet<>());
-        return path;
-    }
-
-    private void buildPath(String doc, List<String> path, Set<String> visited)
-    {
-        if (visited.contains(doc)) {
-            System.out.println("[System] circular dependency at " + doc);
+    // DFS to compute dependencies in order
+    private void buildPlanDFS(String docName, LinkedHashSet<String> ordered, Set<String> visiting) {
+        Document d = documents.get(docName);
+        if (d == null) {
+            ordered.add(docName);
             return;
         }
-        visited.add(doc);
-        Document d = documents.get(doc);
-        if (d == null) return;
-        for (String dep : d.getDependencies())
-        {
-            buildPath(dep, path, visited);
+
+        if (visiting.contains(docName)) return; // avoid loops
+        visiting.add(docName);
+
+        for (String dep : d.getDependencies()) {
+            buildPlanDFS(dep, ordered, visiting);
         }
-        if (!path.contains(doc)) path.add(doc);
+
+        ordered.add(docName);
     }
 
-    public void startRandomEvents()
-    {
-        new Thread(() ->
-        {
-            Random random = new Random();
+    // run random background events
+    public void startRandomEvents() {
+        Thread controller = new Thread(() -> {
             while (true) {
-                try
-                {
-                    Thread.sleep(4000 + random.nextInt(3000));
-                    List<Office> list = new ArrayList<>(offices.values());
-                    if (list.isEmpty()) continue;
-                    Office o = list.get(random.nextInt(list.size()));
+                try {
+                    Thread.sleep(1000);
 
-                    int event = random.nextInt(3);
-                    switch (event)
-                    {
-                        case 0 -> { // close/open office
-                            if (o.open)
-                            {
-                                o.closeOffice();
-                                Thread.sleep(2000 + random.nextInt(2000));
-                                o.openOffice();
+                    synchronized (BureaucracySystem.this) {
+                        for (Office o : offices.values()) {
+                            // random break
+                            if (random.nextDouble() < 0.05) {
+                                long breakMs = 500 + random.nextInt(1000);
+                                o.takeBreak(breakMs);
                             }
-                        }
-                        case 1 ->
-                        {
-                            o.restockPaper();
-                        }
-                        case 2 ->
-                        { // open new office if queue long
-                            if (o.queue.size() > 3)
-                            {
-                                String newName = o.name + "-extra";
-                                if (!offices.containsKey(newName))
-                                {
-                                    Office newOffice = new Office(newName, o.documentType, this);
-                                    addOffice(newOffice);
-                                    System.out.println("[System] " + newName + " opened to reduce queue size.");
+
+                            // random paper refill
+                            if (random.nextDouble() < 0.1) {
+                                o.restockPaper(2 + random.nextInt(3));
+                            }
+
+                            // open extra counter if queue too long
+                            if (o.getQueueSize() > 5 && random.nextDouble() < 0.2) {
+                                String newName = o.getName() + "-extra-" + (100 + random.nextInt(900));
+                                if (!offices.containsKey(newName)) {
+                                    Office clone = new Office(newName, o.getDocumentType(), this);
+                                    addOffice(clone);
+                                    System.out.println("[System] opened " + newName + " for " + o.getDocumentType());
                                 }
                             }
                         }
                     }
+
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
                 } catch (Exception ignored) {}
             }
-        }).start();
+        });
+
+        controller.setDaemon(true); // stops with main program
+        controller.start();
     }
 }
-
-//Clasa BureaucracySystem coordonează toate ghișeele și clienții.
-// Gestionează redirecționările, dependențele dintre documente și evenimentele aleatorii.

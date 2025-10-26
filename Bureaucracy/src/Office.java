@@ -1,90 +1,111 @@
-import java.util.*;
+import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class Office implements Runnable
-{
-    String name;
-    String documentType;
-    boolean open = true;
-    int paperSupply = 4;
-    BlockingQueue<Customer> queue = new LinkedBlockingQueue<>();
-    BureaucracySystem system;
-    Random random = new Random();
+public class Office implements Runnable {
+    private String name;
+    private String documentType;
+    private boolean open = true; // office is open or closed
+    private boolean serving = true; // if true, office is serving customers
+    private int paperSupply = 4; // how many documents can be printed
+    private BlockingQueue<Customer> queue = new LinkedBlockingQueue<>();
+    private BureaucracySystem system;
+    private Random random = new Random();
 
-    public Office(String name, String documentType, BureaucracySystem system)
-    {
+    public Office(String name, String documentType, BureaucracySystem system) {
         this.name = name;
         this.documentType = documentType;
         this.system = system;
     }
 
-    public void addCustomer(Customer c) throws InterruptedException
-    {
-        if (!open)
-        {
-            System.out.println("[" + c.getName() + "] tries to join " + name + " but it's closed -> redirected.");
-            system.redirectCustomer(c, documentType);
-            return;
+    public String getName() {
+        return name;
+    }
+
+    public String getDocumentType() {
+        return documentType;
+    }
+
+    public int getQueueSize() {
+        return queue.size();
+    }
+
+    // add a customer to the waiting queue
+    public void addCustomer(Customer c) {
+        try {
+            queue.put(c);
+            System.out.println("[" + name + "] " + c.getName() + " joined queue for " + documentType + " (queue=" + queue.size() + ")");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
-        queue.put(c);
-        System.out.println("[" + c.getName() + "] joins the queue at " + name);
     }
 
-    public void closeOffice()
-    {
+    // pause serving (coffee break)
+    public void takeBreak(long ms) {
+        if (!open) return;
+        serving = false;
+        System.out.println("[" + name + "] coffee break (" + ms + " ms)");
+        new Thread(() -> {
+            try {
+                Thread.sleep(ms); // wait during break
+            } catch (InterruptedException ignored) {}
+            serving = true; // back to work
+            System.out.println("[" + name + "] back from break");
+        }).start();
+    }
+
+    // refill paper for printing
+    public synchronized void restockPaper(int amount) {
+        paperSupply += amount;
+        System.out.println("[" + name + "] restocked paper by " + amount + " (now " + paperSupply + ")");
+    }
+
+    // close this office
+    public void closeOffice() {
         open = false;
-        System.out.println("[" + name + "] is now closed (coffee break).");
-    }
-
-    public void openOffice()
-    {
-        open = true;
-        System.out.println("[" + name + "] is now open again!");
-    }
-
-    public void restockPaper()
-    {
-        paperSupply += 3;
-        System.out.println("[" + name + "] paper restocked (total " + paperSupply + ")");
+        serving = false;
+        System.out.println("[" + name + "] closed");
     }
 
     @Override
-    public void run()
-    {
-        try
-        {
-            while (true)
-            {
-                if (!open)
-                {
-                    Thread.sleep(500);
+    public void run() {
+        try {
+            while (open) {
+                if (!serving) { // office is on break
+                    Thread.sleep(200);
                     continue;
                 }
 
-                Customer c = queue.poll();
-                if (c != null)
-                {
-                    if (paperSupply <= 0)
-                    {
-                        System.out.println("[" + name + "] out of paper! Waiting for restock...");
-                        Thread.sleep(2000);
-                        restockPaper();
+                synchronized (this) {
+                    if (paperSupply <= 0) {
+                        System.out.println("[" + name + "] out of paper");
                     }
-                    System.out.println("[" + name + "] processing " + c.getName());
-                    Thread.sleep(1000 + random.nextInt(1000));
-                    paperSupply--;
+                    // wait until paper is restocked
+                    while (paperSupply <= 0 && open) {
+                        Thread.sleep(300);
+                    }
+                }
+
+                // get next customer from queue
+                Customer c = queue.poll();
+                if (c != null) {
+                    System.out.println("[" + name + "] processing " + c.getName() + " for " + documentType);
+                    Thread.sleep(800 + random.nextInt(800)); // simulate time to process document
+
+                    synchronized (this) {
+                        paperSupply--; // use one sheet
+                    }
+
+                    // give the document to customer
                     c.receiveDocument(documentType);
                 } else {
-                    Thread.sleep(300);
+                    // no customers waiting
+                    Thread.sleep(200);
                 }
             }
-        } catch (InterruptedException e)
-        {
-            System.out.println("[" + name + "] stopped working.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
+        System.out.println("[" + name + "] stopped working");
     }
 }
-
-//Clasa Office reprezintă un ghișeu. Poate procesa clienți, se poate închide,
-// cand rămâne fără hârtie și este reumplută automat. Rulează într-un thread separat.
