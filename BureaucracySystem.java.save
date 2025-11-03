@@ -1,0 +1,74 @@
+q
+qq
+x
+ximport java.util.*;
+import java.util.concurrent.*;
+
+public class BureaucracySystem {
+
+    // Thread-safe maps for documents and offices
+    private final Map<String, Document> documents = new ConcurrentHashMap<>();
+    private final Map<String, Office> offices = new ConcurrentHashMap<>();
+
+    // Thread pool simulating counters in offices
+    private final ExecutorService executor = Executors.newCachedThreadPool();
+
+    // Thread-safe random generator
+    private final ThreadLocalRandom random = ThreadLocalRandom.current();
+
+    public void addOffice(String name, Office office) {
+        // Atomic — avoids race between containsKey + put
+        offices.putIfAbsent(name, office);
+        executor.submit(office);
+    }
+
+    public void addDocument(String name, Document document) {
+        documents.putIfAbsent(name, document);
+    }
+
+    // Find a path of dependencies for a document (DFS)
+    public List<Document> getAcquisitionPlan(Document target) {
+        List<Document> plan = new ArrayList<>();
+        Set<Document> visited = ConcurrentHashMap.newKeySet();
+        buildPlanDFS(target, visited, plan);
+        Collections.reverse(plan);
+        return plan;
+    }
+
+    private void buildPlanDFS(Document doc, Set<Document> visited, List<Document> plan) {
+        if (!visited.add(doc)) return;
+        for (Document req : doc.getRequiredDocuments()) {
+            buildPlanDFS(req, visited, plan);
+        }
+        plan.add(doc);
+    }
+
+    // Pick a random office issuing a given document
+    public Office findOfficeFor(Document d) {
+        for (Office office : offices.values()) {
+            if (office.issues(d)) return office;
+        }
+        return null;
+    }
+
+    // Background thread adding offices (simulation)
+    public void startRandomEvents() {
+        Thread eventThread = new Thread(() -> {
+            while (true) {
+                try { Thread.sleep(5000); } catch (InterruptedException ignored) {}
+
+                String officeName = "RandomOffice" + random.nextInt(1000);
+                Office newOffice = new Office(officeName, this);
+
+                addOffice(officeName, newOffice);
+                System.out.println("⚠️  New office opened: " + officeName);
+            }
+        });
+        eventThread.setDaemon(true);
+        eventThread.start();
+    }
+
+    public void shutdown() {
+        executor.shutdown();
+    }
+}
