@@ -13,25 +13,26 @@ public class Customer extends Thread {
     }
 
     public boolean hasDocument(String name) {
-    return obtained.stream().anyMatch(d -> d.getName().equals(name));
-}
-
+        return obtained.stream().anyMatch(d -> d.getName().equals(name));
+    }
 
     public synchronized void receive(Document d) {
-    obtained.add(d);
-    notifyAll();
-    System.out.println("📎 " + getName() + " received " + d.getName());
+        obtained.add(d);
+        notifyAll();
+        System.out.println(getName() + " received " + d.getName());
 
-    // B MODE: If FormA or TaxReceipt done, return to InfoDesk to continue passport process
-    if (d.getName().equals("FormA") || d.getName().equals("TaxReceipt")) {
-        Office info = sys.getOffice("InfoDesk");
-        info.enqueue(this, sys.getDocument("Passport"));
+        // If FormA or TaxReceipt done, return to InfoDesk to continue passport process
+        if (d.getName().equals("FormA") || d.getName().equals("TaxReceipt")) {
+            Office info = sys.getOffice("InfoDesk");
+            Document passport = sys.getDocument("Passport");
+            if (info != null && passport != null) {
+                info.enqueue(this, passport);
+            } else {
+                System.out.println(getName() + " WARN: InfoDesk or Passport doc missing when trying to re-enqueue");
+            }
+        }
     }
-}
 
-
-  
-  
     private synchronized void waitFor(Document d) {
         while (!obtained.contains(d)) {
             try { wait(); } catch (InterruptedException ignored) {}
@@ -45,10 +46,14 @@ public class Customer extends Thread {
 
         for (Document d : plan) {
             Office o = sys.findOffice(d);
+            if (o == null) {
+                System.out.println(getName() + " ERROR: no office found for " + d.getName() + " — aborting");
+                return;
+            }
             o.enqueue(this, d);
             waitFor(d);
         }
 
-        System.out.println("🎉 " + getName() + " completed all documents!");
+        System.out.println(getName() + " completed all documents!");
     }
 }
