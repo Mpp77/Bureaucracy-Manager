@@ -39,11 +39,11 @@ public class Office implements Runnable {
 
     private void maybeBreak() throws InterruptedException {
         if (Math.random() < 0.04) {
-            System.out.println("☕ " + name + " is on coffee break...");
+            System.out.println(name + " is on coffee break...");
             open = false;
             Thread.sleep(3000);
             open = true;
-            System.out.println("✅ " + name + " reopened");
+            System.out.println(name + " reopened");
         }
     }
 
@@ -52,13 +52,13 @@ public class Office implements Runnable {
         if (paper.get() <= 1 || now - lastRestock > 10000 || Math.random() < 0.04) {
             paper.addAndGet(5);
             lastRestock = now;
-            System.out.println("📄 Paper restocked at " + name);
+            System.out.println("Paper restocked at " + name);
         }
     }
 
     private void maybeExpand() {
         if (queue.size() > 5) {
-            System.out.println("⚠️ Queue at " + name + " = " + queue.size() + " → requesting new desk");
+            System.out.println("Queue at " + name + " = " + queue.size() + " -> requesting new desk");
             system.expandOffice(this);
         }
     }
@@ -70,33 +70,45 @@ public class Office implements Runnable {
 
             if (!r.customer.hasDocument("FormA")) {
                 System.out.println(name + ": You need FormA first. Redirecting to FormsDesk...");
-                system.getOffice("FormsDesk").enqueue(r.customer, system.getDocument("FormA"));
-                return;
+                Office forms = system.getOffice("FormsDesk");
+                Document f = system.getDocument("FormA");
+                if (forms != null && f != null) {
+                    forms.enqueue(r.customer, f);
+                    return;
+                } else {
+                    System.out.println(name + " ERROR: FormsDesk or FormA missing");
+                }
             }
 
             if (!r.customer.hasDocument("TaxReceipt")) {
                 System.out.println(name + ": You must pay a $3 fee first. Redirecting to PaymentsDesk...");
-                system.getOffice("PaymentsDesk").enqueue(r.customer, system.getDocument("TaxReceipt"));
-                return;
+                Office pay = system.getOffice("PaymentsDesk");
+                Document t = system.getDocument("TaxReceipt");
+                if (pay != null && t != null) {
+                    pay.enqueue(r.customer, t);
+                    return;
+                } else {
+                    System.out.println(name + " ERROR: PaymentsDesk or TaxReceipt missing");
+                }
             }
         }
 
         // Handle paper shortage
         while (paper.get() <= 0) {
-            System.out.println("🚫 " + name + " ran out of paper — " + r.customer.getName() + " waiting");
+            System.out.println(name + " ran out of paper — " + r.customer.getName() + " waiting");
             Thread.sleep(1500);
         }
 
         paper.decrementAndGet();
         Thread.sleep(1200);
 
-        System.out.println("✅ " + name + " processed " + r.document.getName() + " for " + r.customer.getName());
+        System.out.println(name + " processed " + r.document.getName() + " for " + r.customer.getName());
         r.customer.receive(r.document);
     }
 
     @Override
     public void run() {
-        System.out.println("🏢 Office started: " + name + " [" + type + "]");
+        System.out.println("Office started: " + name + " [" + type + "]");
 
         while (true) {
             try {
@@ -107,7 +119,7 @@ public class Office implements Runnable {
                 Request r = queue.take();
 
                 if (!open) {
-                    System.out.println("⚠️ " + name + " closed — redirecting " + r.customer.getName());
+                    System.out.println("Warning: " + name + " closed — redirecting " + r.customer.getName());
                     Office alt = system.findOffice(r.document);
                     if (alt != null && alt != this) {
                         alt.enqueue(r.customer, r.document);
